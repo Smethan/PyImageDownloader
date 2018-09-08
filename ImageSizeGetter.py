@@ -93,7 +93,8 @@ class Scraper:
 					othername = file_name.split("/")
 					filename = othername[len(othername) - 1] + file_extension
 					if os.path.exists(os.path.join(tags, filename)):
-						cprint(filename + " already exists, moving on...", 'red')
+						cprint("\r\x1b[K"+filename + " already exists, moving on...", 'red')
+						bar.next()
 						pass
 					else:
 						if file_extension == ".png":
@@ -112,7 +113,7 @@ class Scraper:
 						assert response.status == 200
 						with open(os.path.join(tags, filename), "wb") as f:
 							e.submit(f.write, img)
-				bar.next()
+				# bar.next()
 				bar.finish()
 class e926(Scraper):
 	"""docstring for e926"""
