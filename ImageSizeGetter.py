@@ -6,6 +6,7 @@ import uuid
 import concurrent.futures as fut
 import os
 from termcolor import cprint
+from progress.bar import Bar
 
 class Scraper:
 	def __init__(self, session):
@@ -84,6 +85,7 @@ class Scraper:
 		async with aiohttp.ClientSession() as session:
 			with fut.ThreadPoolExecutor(max_workers=10000) as e:
 				print(urls)
+				bar = Bar("Downloading", max=len(urls))
 				if not os.path.exists(tags):
 					os.makedirs(tags)
 				for i in urls:
@@ -95,20 +97,23 @@ class Scraper:
 						pass
 					else:
 						if file_extension == ".png":
-							cprint(filename, 'green')
+							cprint("\r\x1b[K"+filename, 'green')
 						elif file_extension == ".jpg":
-							cprint(filename, 'yellow')
+							cprint("\r\x1b[K"+filename, 'yellow')
 						elif file_extension == ".gif":
-							cprint(filename, 'cyan')
+							cprint("\r\x1b[K"+filename, 'cyan')
 						elif file_extension == ".webm":
-							cprint(filename, 'magenta')
+							cprint("\r\x1b[K"+filename, 'magenta')
 						else:
-							cprint(filename, 'blue')
+							cprint("\r\x1b[K"+filename, 'blue')
+						bar.next()
 						response = await session.get(i, headers=self.Header)
 						img = await response.read()
 						assert response.status == 200
 						with open(os.path.join(tags, filename), "wb") as f:
 							e.submit(f.write, img)
+				bar.next()
+				bar.finish()
 class e926(Scraper):
 	"""docstring for e926"""
 	
@@ -146,6 +151,26 @@ class e621(Scraper):
 	def file_url(self):
 		return "file_url"
 
+class lolibooru(Scraper):
+	"""docstring for e926"""
+	
+	@property
+	def baseURL(self):
+		return "https://lolibooru.moe"
+
+	@property
+	def extension(self):
+		return "/post/index.json"
+
+	@property
+	def fileSizePropName(self):
+		return "file_size"
+
+	@property
+	def file_url(self):
+		return "file_url"
+
+
 class Runner:
 	
 	def parse_arg(self):
@@ -153,6 +178,7 @@ class Runner:
 		ap.add_argument("-a", "--amount", help="how many images to check. Default: 50")
 		ap.add_argument("-e9", "--e926", help="Search e926", action='store_true')
 		ap.add_argument("-e6", "--e621", help="Search e621", action='store_true')
+		ap.add_argument("-lo", "--lolibooru", help="search lolibooru", action='store_true')
 		ap.add_argument("-t", "--tags", nargs="+", help="tags to search")
 		args = vars(ap.parse_args())
 		return args
@@ -173,6 +199,8 @@ class Runner:
 				FinalBytes, FinalKilo, FinalMega, imgcount, fileList = await e926(session).find_size(limit=limit, tags=tags)
 			elif args["e621"] is not False:
 				FinalBytes, FinalKilo, FinalMega, imgcount, fileList = await e621(session).find_size(limit=limit, tags=tags)
+			elif args["lolibooru"] is not False:
+				FinalBytes, FinalKilo, FinalMega, imgcount, fileList = await lolibooru(session).find_size(limit=limit, tags=tags)
 			else:
 				raise Exception("Invalid Input!")
 			await session.close()
