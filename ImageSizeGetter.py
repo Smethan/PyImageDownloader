@@ -5,6 +5,7 @@ import argparse
 import uuid
 import concurrent.futures as fut
 import os
+from termcolor import cprint
 
 class Scraper:
 	def __init__(self, session):
@@ -89,12 +90,25 @@ class Scraper:
 					file_name, file_extension = os.path.splitext(i)
 					othername = file_name.split("/")
 					filename = othername[len(othername) - 1] + file_extension
-					print(filename)
-					response = await session.get(i, headers=self.Header)
-					img = await response.read()
-					assert response.status == 200
-					with open(os.path.join(tags, filename), "wb") as f:
-						e.submit(f.write, img)
+					if os.path.exists(os.path.join(tags, filename)):
+						cprint(filename + " already exists, moving on...", 'red')
+						pass
+					else:
+						if file_extension == ".png":
+							cprint(filename, 'green')
+						elif file_extension == ".jpg":
+							cprint(filename, 'yellow')
+						elif file_extension == ".gif":
+							cprint(filename, 'cyan')
+						elif file_extension == ".webm":
+							cprint(filename, 'magenta')
+						else:
+							cprint(filename, 'blue')
+						response = await session.get(i, headers=self.Header)
+						img = await response.read()
+						assert response.status == 200
+						with open(os.path.join(tags, filename), "wb") as f:
+							e.submit(f.write, img)
 class e926(Scraper):
 	"""docstring for e926"""
 	
