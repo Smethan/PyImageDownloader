@@ -5,8 +5,11 @@ import argparse
 import uuid
 import concurrent.futures as fut
 import os
+import threading
 from termcolor import cprint
 from progress.bar import Bar
+from multiprocessing import Process
+import time
 
 class Scraper:
 	def __init__(self, session):
@@ -81,10 +84,25 @@ class Scraper:
 		
 		return size, kilobytes, megabytes, imgcount, file_url_list
 
+	def thread_write(self, file, path):
+		with open(path, "wb") as f:
+			f.write(file)
+	async def fetch(self, url):
+		async with aiohttp.ClientSession() as r:
+			response = await r.get(url, headers=self.Header)
+			return await response.read()
+
 	async def download(self, urls = [], tags="notag"):
 		async with aiohttp.ClientSession() as session:
 			with fut.ThreadPoolExecutor(max_workers=10000) as e:
 				print(urls)
+				loop = asyncio.new_event_loop()
+				asyncio.set_event_loop(loop)
+				print("PID: ", os.getpid())
+				print("Started: ", time.time())
+				futures = []
+				requests = []
+				filenames = []
 				bar = Bar("Downloading", max=len(urls))
 				if not os.path.exists(tags):
 					os.makedirs(tags)
@@ -92,6 +110,7 @@ class Scraper:
 					file_name, file_extension = os.path.splitext(i)
 					othername = file_name.split("/")
 					filename = othername[len(othername) - 1] + file_extension
+					filenames.append(filename)
 					if os.path.exists(os.path.join(tags, filename)):
 						cprint("\r\x1b[K"+filename + " already exists, moving on...", 'red')
 						bar.next()
@@ -107,13 +126,29 @@ class Scraper:
 							cprint("\r\x1b[K"+filename, 'magenta')
 						else:
 							cprint("\r\x1b[K"+filename, 'blue')
+						print(threading.active_count())
 						bar.next()
-						response = await session.get(i, headers=self.Header)
-						img = await response.read()
-						assert response.status == 200
-						with open(os.path.join(tags, filename), "wb") as f:
-							e.submit(f.write, img)
+						requests.append(asyncio.ensure_future(self.fetch(i)))
+						
+						
+				
+				
+					responses = loop.run_until_complete(asyncio.gather(*requests))
+					for i in responses:
+						e = 0
+						filename = filenames[e]
+						path = os.path.join(tags, filename)
+						
+						p = Process(target = self.thread_write, args=(i, path))
+						futures.append(p)
+						e = e+1
 				# bar.next()
+				for p in futures:
+					p.start()
+				print("\nAll started: ", threading.active_count())
+				for p in futures:
+					p.join()
+				print("Done")
 				bar.finish()
 class e926(Scraper):
 	"""docstring for e926"""
@@ -152,7 +187,7 @@ class e621(Scraper):
 	def file_url(self):
 		return "file_url"
 
-class lolibooru(Scraper):
+class lb(Scraper):
 	"""docstring for e926"""
 	
 	@property
@@ -179,7 +214,7 @@ class Runner:
 		ap.add_argument("-a", "--amount", help="how many images to check. Default: 50")
 		ap.add_argument("-e9", "--e926", help="Search e926", action='store_true')
 		ap.add_argument("-e6", "--e621", help="Search e621", action='store_true')
-		ap.add_argument("-lo", "--lolibooru", help="search lolibooru", action='store_true')
+		ap.add_argument("-lo", "--lb", help="search", action='store_true')
 		ap.add_argument("-t", "--tags", nargs="+", help="tags to search")
 		args = vars(ap.parse_args())
 		return args
@@ -200,16 +235,18 @@ class Runner:
 				FinalBytes, FinalKilo, FinalMega, imgcount, fileList = await e926(session).find_size(limit=limit, tags=tags)
 			elif args["e621"] is not False:
 				FinalBytes, FinalKilo, FinalMega, imgcount, fileList = await e621(session).find_size(limit=limit, tags=tags)
-			elif args["lolibooru"] is not False:
-				FinalBytes, FinalKilo, FinalMega, imgcount, fileList = await lolibooru(session).find_size(limit=limit, tags=tags)
+			elif args["lb"] is not False:
+				FinalBytes, FinalKilo, FinalMega, imgcount, fileList = await lb(session).find_size(limit=limit, tags=tags)
 			else:
 				raise Exception("Invalid Input!")
 			await session.close()
 			input(f"Searched for {limit} images, found {imgcount} images, Bytes: {FinalBytes}, Kilobytes: {FinalKilo}, Megabytes: {FinalMega}\nPress any key to download, Ctrl+C to abort")
+			loop = asyncio.get_running_loop()
 			if args["tags"] is not None:
 				await e621(session).download(fileList, tags=args["tags"][0])
 			else:
 				await e621(session).download(fileList)
+			
 if __name__ == "__main__":
 	r = Runner()
 	loop = asyncio.get_event_loop()
