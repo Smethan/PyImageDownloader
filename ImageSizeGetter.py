@@ -10,7 +10,7 @@ from termcolor import cprint
 from progress.bar import Bar
 from multiprocessing import Process
 import time
-
+loop = asyncio.new_event_loop()
 class Scraper:
 	def __init__(self, session):
 		self.session = session
@@ -40,7 +40,7 @@ class Scraper:
 	async def grab_json(self, **kwargs):
 
 		async with self.session.get(self.baseURL + self.extension, params=kwargs, headers=self.Header) as resp:
-			print(resp)
+			# print(resp)
 			if resp.status == 200:
 				# print(await resp.json())
 				return await resp.json()
@@ -95,11 +95,12 @@ class Scraper:
 	async def download(self, urls = [], tags="notag"):
 		async with aiohttp.ClientSession() as session:
 			with fut.ThreadPoolExecutor(max_workers=10000) as e:
-				print(urls)
-				loop = asyncio.new_event_loop()
+				# print(urls)
+				loop = asyncio.get_event_loop()
+				
 				asyncio.set_event_loop(loop)
-				print("PID: ", os.getpid())
-				print("Started: ", time.time())
+				cprint("PID: " + str(os.getpid()), 'red')
+				cprint("Started: " + str(time.time()), 'yellow')
 				futures = []
 				requests = []
 				filenames = []
@@ -116,39 +117,45 @@ class Scraper:
 						bar.next()
 						pass
 					else:
-						if file_extension == ".png":
-							cprint("\r\x1b[K"+filename, 'green')
-						elif file_extension == ".jpg":
-							cprint("\r\x1b[K"+filename, 'yellow')
-						elif file_extension == ".gif":
-							cprint("\r\x1b[K"+filename, 'cyan')
-						elif file_extension == ".webm":
-							cprint("\r\x1b[K"+filename, 'magenta')
-						else:
-							cprint("\r\x1b[K"+filename, 'blue')
-						print(threading.active_count())
-						bar.next()
-						requests.append(asyncio.ensure_future(self.fetch(i)))
+						# if file_extension == ".png":
+						# 	cprint("\r\x1b[K"+filename, 'green')
+						# elif file_extension == ".jpg":
+						# 	cprint("\r\x1b[K"+filename, 'yellow')
+						# elif file_extension == ".gif":
+						# 	cprint("\r\x1b[K"+filename, 'cyan')
+						# elif file_extension == ".webm":
+						# 	cprint("\r\x1b[K"+filename, 'magenta')
+						# else:
+						# 	cprint("\r\x1b[K"+filename, 'blue')
+						# print(threading.active_count())
+						requests.append(asyncio.ensure_future(self.fetch(i), loop=loop))
 						
 						
-				
-				
-					responses = loop.run_until_complete(asyncio.gather(*requests))
-					for i in responses:
-						e = 0
-						filename = filenames[e]
-						path = os.path.join(tags, filename)
 						
-						p = Process(target = self.thread_write, args=(i, path))
-						futures.append(p)
-						e = e+1
+						
+					
+				# otherloop = asyncio.new_event_loop()
+				# asyncio.set_event_loop(otherloop)
+				cprint("Gathering urls...", 'blue')
+				responses = asyncio.gather(*requests, loop=loop)
+				cprint("Done", 'green')
+				e = 0
+				for i in await responses:
+					
+					filename = filenames[e]
+					path = os.path.join(tags, filename)
+					
+					p = Process(target = self.thread_write, args=(i, path))
+					futures.append(p)
+					e = e+1
 				# bar.next()
 				for p in futures:
 					p.start()
-				print("\nAll started: ", threading.active_count())
+				cprint("Threads started: " + str(threading.active_count()), 'blue')
 				for p in futures:
 					p.join()
-				print("Done")
+					bar.next()
+				cprint("\nDone! Files saved to: " + os.getcwd() + "/" + tags, 'green')
 				bar.finish()
 class e926(Scraper):
 	"""docstring for e926"""
